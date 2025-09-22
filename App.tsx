@@ -158,7 +158,7 @@ const App: React.FC = () => {
         <div className="w-full max-w-md mx-auto bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl shadow-xl shadow-blue-500/10">
             <div className="p-8">
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-sky-500">画像アップローダー</h1>
+                    <h1 className="text-3xl font-bold text-gray-800">画像→URL変換くん</h1>
                     <p className="text-gray-500 mt-2">画像をアップロードして共有リンクを即座に取得</p>
                 </div>
 
@@ -318,8 +318,7 @@ const App: React.FC = () => {
                 )}
             </div>
                 <footer className="text-center text-xs text-gray-400 border-t border-gray-200 py-3">
-                    Powered by{' '}
-                    <a href="https://tsukichiyo.inc" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600 underline">tsukichiyo.inc</a>
+                    Powered by tsukichiyo.inc
                 </footer>
         </div>
     </div>
