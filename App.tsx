@@ -161,12 +161,15 @@ const App: React.FC = () => {
                     <p className="text-xs text-blue-600 mb-2">
                         以下の環境変数を.envファイルに設定してください：
                     </p>
-                    <div className="text-xs text-blue-600 space-y-1">
+                    <div className="text-xs text-blue-600 space-y-1 font-mono">
                         <div>• VITE_CLOUDINARY_CLOUD_NAME=your_cloud_name</div>
                         <div>• VITE_CLOUDINARY_API_KEY=your_api_key</div>
                         <div>• VITE_CLOUDINARY_API_SECRET=your_api_secret</div>
                     </div>
                     <p className="text-xs text-blue-600 mt-2">
+                        環境変数名は小文字、数字、ダッシュ、アンダースコアのみ使用可能です。
+                    </p>
+                    <p className="text-xs text-blue-600 mt-1">
                         <a href="https://cloudinary.com/" target="_blank" rel="noopener noreferrer" className="underline">
                             Cloudinaryアカウントの作成はこちら
                         </a>
