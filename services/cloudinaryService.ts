@@ -4,23 +4,15 @@ const CLOUDINARY_UPLOAD_URL = 'https://api.cloudinary.com/v1_1';
 
 // 署名を生成する関数
 const generateSignature = async (timestamp: number, apiSecret: string): Promise<string> => {
-  const message = `timestamp=${timestamp}`;
+  // Cloudinaryの署名生成: パラメータ + APIシークレットをSHA-1でハッシュ化
+  const message = `timestamp=${timestamp}${apiSecret}`;
   
-  // Web Crypto APIを使用してHMAC-SHA1を生成
+  // Web Crypto APIを使用してSHA-1ハッシュを生成
   const encoder = new TextEncoder();
-  const keyData = encoder.encode(apiSecret);
   const messageData = encoder.encode(message);
   
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    keyData,
-    { name: 'HMAC', hash: 'SHA-1' },
-    false,
-    ['sign']
-  );
-  
-  const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
-  const hashArray = Array.from(new Uint8Array(signature));
+  const hashBuffer = await crypto.subtle.digest('SHA-1', messageData);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
   const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   
   return hashHex;

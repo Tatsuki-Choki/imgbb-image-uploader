@@ -156,25 +156,6 @@ const App: React.FC = () => {
                     <p className="text-gray-500 mt-2">画像をCloudinaryにアップロードして共有リンクを即座に取得</p>
                 </div>
 
-                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <h3 className="text-sm font-medium text-blue-800 mb-2">環境変数の設定</h3>
-                    <p className="text-xs text-blue-600 mb-2">
-                        以下の環境変数を.envファイルに設定してください：
-                    </p>
-                    <div className="text-xs text-blue-600 space-y-1 font-mono">
-                        <div>• VITE_cloudinary_cloud_name=your_cloud_name</div>
-                        <div>• VITE_cloudinary_api_key=your_api_key</div>
-                        <div>• VITE_cloudinary_api_secret=your_api_secret</div>
-                    </div>
-                    <p className="text-xs text-blue-600 mt-2">
-                        環境変数名は小文字、数字、ダッシュ、アンダースコアのみ使用可能です。
-                    </p>
-                    <p className="text-xs text-blue-600 mt-1">
-                        <a href="https://cloudinary.com/" target="_blank" rel="noopener noreferrer" className="underline">
-                            Cloudinaryアカウントの作成はこちら
-                        </a>
-                    </p>
-                </div>
 
                 <div className="mb-6">
                     <label className="block text-sm font-medium text-gray-700 mb-3">アップロードモード</label>
