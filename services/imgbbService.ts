@@ -32,3 +32,28 @@ export const uploadImage = async (imageFile: File, apiKey: string): Promise<stri
     throw new Error('画像のアップロード中に予期せぬエラーが発生しました。');
   }
 };
+
+export const uploadMultipleImages = async (imageFiles: File[], apiKey: string): Promise<string[]> => {
+  if (!apiKey || apiKey.trim() === '') {
+    throw new Error('ImgBB APIキーが設定されていません。');
+  }
+
+  if (imageFiles.length === 0) {
+    throw new Error('アップロードする画像がありません。');
+  }
+
+  if (imageFiles.length > 10) {
+    throw new Error('一度にアップロードできる画像は10枚までです。');
+  }
+
+  try {
+    const uploadPromises = imageFiles.map(file => uploadImage(file, apiKey));
+    const urls = await Promise.all(uploadPromises);
+    return urls;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`一括アップロード失敗: ${error.message}`);
+    }
+    throw new Error('画像の一括アップロード中に予期せぬエラーが発生しました。');
+  }
+};

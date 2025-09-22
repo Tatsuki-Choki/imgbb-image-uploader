@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { uploadImage } from './services/imgbbService';
+import { uploadImage, uploadMultipleImages } from './services/imgbbService';
 
 // --- Icon Components (defined outside App to prevent re-creation on re-renders) ---
 
@@ -29,12 +29,13 @@ const Spinner: React.FC = () => (
 
 const App: React.FC = () => {
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('imgbbApiKey') || '');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [uploading, setUploading] = useState<boolean>(false);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState<boolean>(false);
+  const [uploadMode, setUploadMode] = useState<'single' | 'multiple'>('single');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -43,18 +44,16 @@ const App: React.FC = () => {
   }, [apiKey]);
 
   useEffect(() => {
-    // Cleanup the object URL to avoid memory leaks
+    // Cleanup the object URLs to avoid memory leaks
     return () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
+      previewUrls.forEach(url => URL.revokeObjectURL(url));
     };
-  }, [previewUrl]);
+  }, [previewUrls]);
 
   const resetState = () => {
-    setSelectedFile(null);
-    setPreviewUrl(null);
-    setImageUrl(null);
+    setSelectedFiles([]);
+    setPreviewUrls([]);
+    setImageUrls([]);
     setError(null);
     setIsCopied(false);
     if (fileInputRef.current) {
@@ -63,20 +62,36 @@ const App: React.FC = () => {
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      if (!file.type.startsWith('image/')) {
-        setError('有効な画像ファイルを選択してください。');
-        return;
-      }
-      resetState();
-      setSelectedFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    // 画像ファイルかチェック
+    const invalidFiles = files.filter(file => !file.type.startsWith('image/'));
+    if (invalidFiles.length > 0) {
+      setError('有効な画像ファイルを選択してください。');
+      return;
+    }
+
+    // 複数ファイルの上限チェック
+    if (uploadMode === 'multiple' && files.length > 10) {
+      setError('一度にアップロードできる画像は10枚までです。');
+      return;
+    }
+
+    resetState();
+    
+    if (uploadMode === 'single') {
+      const file = files[0];
+      setSelectedFiles([file]);
+      setPreviewUrls([URL.createObjectURL(file)]);
+    } else {
+      setSelectedFiles(files);
+      setPreviewUrls(files.map(file => URL.createObjectURL(file)));
     }
   };
 
   const handleUpload = useCallback(async () => {
-    if (!selectedFile) return;
+    if (selectedFiles.length === 0) return;
     if (!apiKey.trim()) {
         setError('ImgBB APIキーを入力してください。');
         return;
@@ -84,11 +99,16 @@ const App: React.FC = () => {
 
     setUploading(true);
     setError(null);
-    setImageUrl(null);
+    setImageUrls([]);
 
     try {
-      const url = await uploadImage(selectedFile, apiKey);
-      setImageUrl(url);
+      if (uploadMode === 'single') {
+        const url = await uploadImage(selectedFiles[0], apiKey);
+        setImageUrls([url]);
+      } else {
+        const urls = await uploadMultipleImages(selectedFiles, apiKey);
+        setImageUrls(urls);
+      }
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -98,16 +118,26 @@ const App: React.FC = () => {
     } finally {
       setUploading(false);
     }
-  }, [selectedFile, apiKey]);
+  }, [selectedFiles, apiKey, uploadMode]);
 
-  const handleCopy = useCallback(() => {
-    if (!imageUrl || !navigator.clipboard) return;
+  const handleCopy = useCallback((url: string) => {
+    if (!url || !navigator.clipboard) return;
 
-    navigator.clipboard.writeText(imageUrl).then(() => {
+    navigator.clipboard.writeText(url).then(() => {
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2500);
     });
-  }, [imageUrl]);
+  }, []);
+
+  const handleCopyAll = useCallback(() => {
+    if (imageUrls.length === 0 || !navigator.clipboard) return;
+
+    const allUrls = imageUrls.join('\n');
+    navigator.clipboard.writeText(allUrls).then(() => {
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2500);
+    });
+  }, [imageUrls]);
 
   return (
     <div className="min-h-screen w-full bg-gray-100 flex flex-col items-center justify-center p-4 text-slate-800 font-sans">
@@ -128,33 +158,94 @@ const App: React.FC = () => {
                         placeholder="APIキーを入力してください"
                         className="mt-1 w-full px-3 py-2 text-slate-800 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
-                    <p className="mt-1 text-xs text-gray-500">APIキーはブラウザに保存されます。</p>
+                    <p className="mt-1 text-xs text-gray-500">
+                        APIキーはブラウザに保存されます。
+                        <a href="https://api.imgbb.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-500 underline ml-1">
+                            ImgBB APIキーの取得はこちら
+                        </a>
+                    </p>
                 </div>
 
-                {!previewUrl && (
+                <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-3">アップロードモード</label>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => {
+                                setUploadMode('single');
+                                resetState();
+                            }}
+                            className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                uploadMode === 'single'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
+                        >
+                            単一画像
+                        </button>
+                        <button
+                            onClick={() => {
+                                setUploadMode('multiple');
+                                resetState();
+                            }}
+                            className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                uploadMode === 'multiple'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
+                        >
+                            複数画像（最大10枚）
+                        </button>
+                    </div>
+                </div>
+
+                {previewUrls.length === 0 && (
                     <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors duration-300">
                         <div className="flex flex-col items-center justify-center pt-5 pb-6">
                             <UploadIcon />
-                            <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">クリックしてアップロード</span></p>
+                            <p className="mb-2 text-sm text-gray-500">
+                                <span className="font-semibold">
+                                    {uploadMode === 'single' ? 'クリックして画像を選択' : 'クリックして画像を選択（最大10枚）'}
+                                </span>
+                            </p>
                             <p className="text-xs text-gray-400">またはドラッグ＆ドロップ</p>
                         </div>
-                        <input ref={fileInputRef} id="dropzone-file" type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+                        <input 
+                            ref={fileInputRef} 
+                            id="dropzone-file" 
+                            type="file" 
+                            className="hidden" 
+                            accept="image/*" 
+                            multiple={uploadMode === 'multiple'}
+                            onChange={handleFileChange} 
+                        />
                     </label>
                 )}
 
-                {previewUrl && (
+                {previewUrls.length > 0 && (
                     <div className="mt-4 flex flex-col items-center gap-4">
-                        <div className="w-full h-48 flex justify-center items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
-                            <img src={previewUrl} alt="プレビュー画像" className="object-contain max-h-full max-w-full" />
+                        <div className="w-full">
+                            {uploadMode === 'single' ? (
+                                <div className="w-full h-48 flex justify-center items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                                    <img src={previewUrls[0]} alt="プレビュー画像" className="object-contain max-h-full max-w-full" />
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                                    {previewUrls.map((url, index) => (
+                                        <div key={index} className="w-full h-24 flex justify-center items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                                            <img src={url} alt={`プレビュー画像 ${index + 1}`} className="object-contain max-h-full max-w-full" />
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
-                         {!imageUrl && !uploading && (
+                         {imageUrls.length === 0 && !uploading && (
                             <div className="flex w-full gap-2">
                                 <button
                                     onClick={handleUpload}
                                     disabled={uploading || !apiKey}
                                     className="flex-grow items-center justify-center h-12 px-6 font-semibold text-white transition-all duration-300 bg-blue-600 rounded-lg hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-white disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    画像をアップロード
+                                    {uploadMode === 'single' ? '画像をアップロード' : `${selectedFiles.length}枚の画像をアップロード`}
                                 </button>
                                 <button 
                                     onClick={resetState}
@@ -180,32 +271,51 @@ const App: React.FC = () => {
                     </div>
                 )}
                 
-                {imageUrl && (
+                {imageUrls.length > 0 && (
                     <div className="mt-6 space-y-3 animate-fade-in">
-                        <label htmlFor="imageUrl" className="block text-sm font-medium text-gray-700">画像URL:</label>
-                        <div className="flex gap-2">
-                            <input
-                                id="imageUrl"
-                                type="text"
-                                value={imageUrl}
-                                readOnly
-                                className="w-full px-3 py-2 text-slate-700 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                            <button
-                                onClick={handleCopy}
-                                className={`flex items-center justify-center w-28 h-10 px-4 font-semibold text-white transition-all duration-300 rounded-lg ${
-                                    isCopied ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'
-                                } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white ${isCopied ? 'focus:ring-green-500' : 'focus:ring-blue-500'}`}
-                            >
-                                {isCopied ? <CheckIcon /> : <CopyIcon />}
-                                <span className="ml-2">{isCopied ? 'コピー完了' : 'コピー'}</span>
-                            </button>
+                        <div className="flex items-center justify-between">
+                            <label className="block text-sm font-medium text-gray-700">
+                                {uploadMode === 'single' ? '画像URL:' : `画像URL (${imageUrls.length}枚):`}
+                            </label>
+                            {uploadMode === 'multiple' && (
+                                <button
+                                    onClick={handleCopyAll}
+                                    className={`flex items-center gap-1 px-3 py-1 text-xs font-medium text-white transition-all duration-300 rounded ${
+                                        isCopied ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'
+                                    }`}
+                                >
+                                    {isCopied ? <CheckIcon className="w-3 h-3" /> : <CopyIcon className="w-3 h-3" />}
+                                    {isCopied ? '全てコピー完了' : '全てコピー'}
+                                </button>
+                            )}
                         </div>
+                        
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                            {imageUrls.map((url, index) => (
+                                <div key={index} className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={url}
+                                        readOnly
+                                        className="flex-1 px-3 py-2 text-xs text-slate-700 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    <button
+                                        onClick={() => handleCopy(url)}
+                                        className={`flex items-center justify-center w-16 h-8 px-2 text-xs font-semibold text-white transition-all duration-300 rounded ${
+                                            isCopied ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'
+                                        }`}
+                                    >
+                                        {isCopied ? <CheckIcon className="w-3 h-3" /> : <CopyIcon className="w-3 h-3" />}
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                        
                         <button 
                             onClick={resetState}
                             className="w-full mt-2 text-sm text-blue-600 hover:text-blue-500 transition-colors"
                         >
-                            別の画像をアップロード
+                            {uploadMode === 'single' ? '別の画像をアップロード' : '別の画像をアップロード'}
                         </button>
                     </div>
                 )}
