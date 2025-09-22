@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { uploadImage, uploadMultipleImages } from './services/imgbbService';
 import { uploadImageToCloudinary, uploadMultipleImagesToCloudinary } from './services/cloudinaryService';
 
 // --- Icon Components (defined outside App to prevent re-creation on re-renders) ---
@@ -29,13 +28,11 @@ const Spinner: React.FC = () => (
 // --- Main App Component ---
 
 const App: React.FC = () => {
-  const [serviceProvider, setServiceProvider] = useState<'imgbb' | 'cloudinary'>(() => 
-    localStorage.getItem('serviceProvider') as 'imgbb' | 'cloudinary' || 'imgbb'
-  );
-  const [imgbbApiKey, setImgbbApiKey] = useState<string>(() => localStorage.getItem('imgbbApiKey') || '');
-  const [cloudName, setCloudName] = useState<string>(() => localStorage.getItem('cloudinaryCloudName') || '');
-  const [cloudinaryApiKey, setCloudinaryApiKey] = useState<string>(() => localStorage.getItem('cloudinaryApiKey') || '');
-  const [apiSecret, setApiSecret] = useState<string>(() => localStorage.getItem('cloudinaryApiSecret') || '');
+  // 環境変数からCloudinary認証情報を取得
+  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || '';
+  const apiKey = import.meta.env.VITE_CLOUDINARY_API_KEY || '';
+  const apiSecret = import.meta.env.VITE_CLOUDINARY_API_SECRET || '';
+  
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [uploading, setUploading] = useState<boolean>(false);
@@ -45,14 +42,12 @@ const App: React.FC = () => {
   const [uploadMode, setUploadMode] = useState<'single' | 'multiple'>('single');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 環境変数の設定チェック
   useEffect(() => {
-    // Save settings to localStorage whenever they change
-    localStorage.setItem('serviceProvider', serviceProvider);
-    localStorage.setItem('imgbbApiKey', imgbbApiKey);
-    localStorage.setItem('cloudinaryCloudName', cloudName);
-    localStorage.setItem('cloudinaryApiKey', cloudinaryApiKey);
-    localStorage.setItem('cloudinaryApiSecret', apiSecret);
-  }, [serviceProvider, imgbbApiKey, cloudName, cloudinaryApiKey, apiSecret]);
+    if (!cloudName || !apiKey || !apiSecret) {
+      setError('環境変数が設定されていません。.envファイルでVITE_CLOUDINARY_CLOUD_NAME、VITE_CLOUDINARY_API_KEY、VITE_CLOUDINARY_API_SECRETを設定してください。');
+    }
+  }, [cloudName, apiKey, apiSecret]);
 
   useEffect(() => {
     // Cleanup the object URLs to avoid memory leaks
@@ -104,14 +99,9 @@ const App: React.FC = () => {
   const handleUpload = useCallback(async () => {
     if (selectedFiles.length === 0) return;
 
-    // Validate credentials based on service provider
-    if (serviceProvider === 'imgbb' && !imgbbApiKey.trim()) {
-      setError('ImgBB APIキーを入力してください。');
-      return;
-    }
-
-    if (serviceProvider === 'cloudinary' && (!cloudName.trim() || !cloudinaryApiKey.trim() || !apiSecret.trim())) {
-      setError('Cloudinary Cloud Name、API Key、API Secretを入力してください。');
+    // 環境変数の設定チェック
+    if (!cloudName || !apiKey || !apiSecret) {
+      setError('環境変数が設定されていません。.envファイルでVITE_CLOUDINARY_CLOUD_NAME、VITE_CLOUDINARY_API_KEY、VITE_CLOUDINARY_API_SECRETを設定してください。');
       return;
     }
 
@@ -120,22 +110,12 @@ const App: React.FC = () => {
     setImageUrls([]);
 
     try {
-      if (serviceProvider === 'imgbb') {
-        if (uploadMode === 'single') {
-          const url = await uploadImage(selectedFiles[0], imgbbApiKey);
-          setImageUrls([url]);
-        } else {
-          const urls = await uploadMultipleImages(selectedFiles, imgbbApiKey);
-          setImageUrls(urls);
-        }
+      if (uploadMode === 'single') {
+        const url = await uploadImageToCloudinary(selectedFiles[0], cloudName, apiKey, apiSecret);
+        setImageUrls([url]);
       } else {
-        if (uploadMode === 'single') {
-          const url = await uploadImageToCloudinary(selectedFiles[0], cloudName, cloudinaryApiKey, apiSecret);
-          setImageUrls([url]);
-        } else {
-          const urls = await uploadMultipleImagesToCloudinary(selectedFiles, cloudName, cloudinaryApiKey, apiSecret);
-          setImageUrls(urls);
-        }
+        const urls = await uploadMultipleImagesToCloudinary(selectedFiles, cloudName, apiKey, apiSecret);
+        setImageUrls(urls);
       }
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -146,7 +126,7 @@ const App: React.FC = () => {
     } finally {
       setUploading(false);
     }
-  }, [selectedFiles, imgbbApiKey, cloudName, cloudinaryApiKey, apiSecret, serviceProvider, uploadMode]);
+  }, [selectedFiles, cloudName, apiKey, apiSecret, uploadMode]);
 
   const handleCopy = useCallback((url: string) => {
     if (!url || !navigator.clipboard) return;
@@ -172,103 +152,26 @@ const App: React.FC = () => {
         <div className="w-full max-w-md mx-auto bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl shadow-xl shadow-blue-500/10">
             <div className="p-8">
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-sky-500">画像URLアップローダー</h1>
-                    <p className="text-gray-500 mt-2">画像をアップロードして共有リンクを即座に取得</p>
+                    <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-sky-500">Cloudinary画像アップローダー</h1>
+                    <p className="text-gray-500 mt-2">画像をCloudinaryにアップロードして共有リンクを即座に取得</p>
                 </div>
 
-                <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-3">サービスプロバイダー</label>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => {
-                                setServiceProvider('imgbb');
-                                resetState();
-                            }}
-                            className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                serviceProvider === 'imgbb'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                        >
-                            ImgBB
-                        </button>
-                        <button
-                            onClick={() => {
-                                setServiceProvider('cloudinary');
-                                resetState();
-                            }}
-                            className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                serviceProvider === 'cloudinary'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                        >
-                            Cloudinary
-                        </button>
+                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h3 className="text-sm font-medium text-blue-800 mb-2">環境変数の設定</h3>
+                    <p className="text-xs text-blue-600 mb-2">
+                        以下の環境変数を.envファイルに設定してください：
+                    </p>
+                    <div className="text-xs text-blue-600 space-y-1">
+                        <div>• VITE_CLOUDINARY_CLOUD_NAME=your_cloud_name</div>
+                        <div>• VITE_CLOUDINARY_API_KEY=your_api_key</div>
+                        <div>• VITE_CLOUDINARY_API_SECRET=your_api_secret</div>
                     </div>
+                    <p className="text-xs text-blue-600 mt-2">
+                        <a href="https://cloudinary.com/" target="_blank" rel="noopener noreferrer" className="underline">
+                            Cloudinaryアカウントの作成はこちら
+                        </a>
+                    </p>
                 </div>
-                
-                {serviceProvider === 'imgbb' ? (
-                    <div className="mb-6">
-                        <label htmlFor="imgbbApiKey" className="block text-sm font-medium text-gray-700">ImgBB APIキー</label>
-                        <input
-                            id="imgbbApiKey"
-                            type="password"
-                            value={imgbbApiKey}
-                            onChange={(e) => setImgbbApiKey(e.target.value)}
-                            placeholder="APIキーを入力してください"
-                            className="mt-1 w-full px-3 py-2 text-slate-800 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <p className="mt-1 text-xs text-gray-500">
-                            APIキーはブラウザに保存されます。
-                            <a href="https://api.imgbb.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-500 underline ml-1">
-                                ImgBB APIキーの取得はこちら
-                            </a>
-                        </p>
-                    </div>
-                ) : (
-                    <div className="mb-6 space-y-4">
-                        <div>
-                            <label htmlFor="cloudName" className="block text-sm font-medium text-gray-700">Cloudinary Cloud Name</label>
-                            <input
-                                id="cloudName"
-                                type="text"
-                                value={cloudName}
-                                onChange={(e) => setCloudName(e.target.value)}
-                                placeholder="Cloud Nameを入力してください"
-                                className="mt-1 w-full px-3 py-2 text-slate-800 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="cloudinaryApiKey" className="block text-sm font-medium text-gray-700">Cloudinary API Key</label>
-                            <input
-                                id="cloudinaryApiKey"
-                                type="text"
-                                value={cloudinaryApiKey}
-                                onChange={(e) => setCloudinaryApiKey(e.target.value)}
-                                placeholder="API Keyを入力してください"
-                                className="mt-1 w-full px-3 py-2 text-slate-800 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="apiSecret" className="block text-sm font-medium text-gray-700">Cloudinary API Secret</label>
-                            <input
-                                id="apiSecret"
-                                type="password"
-                                value={apiSecret}
-                                onChange={(e) => setApiSecret(e.target.value)}
-                                placeholder="API Secretを入力してください"
-                                className="mt-1 w-full px-3 py-2 text-slate-800 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                        </div>
-                        <p className="text-xs text-gray-500">
-                            設定はブラウザに保存されます。
-                            <a href="https://cloudinary.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-500 underline ml-1">
-                                Cloudinaryアカウントの作成はこちら
-                            </a>
-                        </p>
-                    </div>
-                )}
 
                 <div className="mb-6">
                     <label className="block text-sm font-medium text-gray-700 mb-3">アップロードモード</label>
@@ -426,8 +329,6 @@ const App: React.FC = () => {
             </div>
             <footer className="text-center text-xs text-gray-400 border-t border-gray-200 py-3">
                 Powered by{' '}
-                <a href="https://imgbb.com/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600 underline">ImgBB</a>
-                {' '}and{' '}
                 <a href="https://cloudinary.com/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600 underline">Cloudinary</a>
             </footer>
         </div>
