@@ -2,22 +2,50 @@ import type { CloudinarySuccessResponse, CloudinaryErrorResponse } from '../type
 
 const CLOUDINARY_UPLOAD_URL = 'https://api.cloudinary.com/v1_1';
 
+// 署名を生成する関数
+const generateSignature = async (timestamp: number, apiSecret: string): Promise<string> => {
+  const message = `timestamp=${timestamp}`;
+  const encoder = new TextEncoder();
+  const data = encoder.encode(message);
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(apiSecret),
+    { name: 'HMAC', hash: 'SHA-1' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, data);
+  const hashArray = Array.from(new Uint8Array(signature));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+};
+
 export const uploadImageToCloudinary = async (
   imageFile: File, 
   cloudName: string, 
-  uploadPreset: string
+  apiKey: string,
+  apiSecret: string
 ): Promise<string> => {
   if (!cloudName || cloudName.trim() === '') {
     throw new Error('Cloudinary Cloud Nameが設定されていません。');
   }
 
-  if (!uploadPreset || uploadPreset.trim() === '') {
-    throw new Error('Cloudinary Upload Presetが設定されていません。');
+  if (!apiKey || apiKey.trim() === '') {
+    throw new Error('Cloudinary API Keyが設定されていません。');
   }
+
+  if (!apiSecret || apiSecret.trim() === '') {
+    throw new Error('Cloudinary API Secretが設定されていません。');
+  }
+
+  const timestamp = Math.round(new Date().getTime() / 1000);
+  const signature = await generateSignature(timestamp, apiSecret);
 
   const formData = new FormData();
   formData.append('file', imageFile);
-  formData.append('upload_preset', uploadPreset);
+  formData.append('api_key', apiKey);
+  formData.append('timestamp', timestamp.toString());
+  formData.append('signature', signature);
 
   try {
     const response = await fetch(`${CLOUDINARY_UPLOAD_URL}/${cloudName}/image/upload`, {
@@ -45,14 +73,19 @@ export const uploadImageToCloudinary = async (
 export const uploadMultipleImagesToCloudinary = async (
   imageFiles: File[], 
   cloudName: string, 
-  uploadPreset: string
+  apiKey: string,
+  apiSecret: string
 ): Promise<string[]> => {
   if (!cloudName || cloudName.trim() === '') {
     throw new Error('Cloudinary Cloud Nameが設定されていません。');
   }
 
-  if (!uploadPreset || uploadPreset.trim() === '') {
-    throw new Error('Cloudinary Upload Presetが設定されていません。');
+  if (!apiKey || apiKey.trim() === '') {
+    throw new Error('Cloudinary API Keyが設定されていません。');
+  }
+
+  if (!apiSecret || apiSecret.trim() === '') {
+    throw new Error('Cloudinary API Secretが設定されていません。');
   }
 
   if (imageFiles.length === 0) {
@@ -64,7 +97,7 @@ export const uploadMultipleImagesToCloudinary = async (
   }
 
   try {
-    const uploadPromises = imageFiles.map(file => uploadImageToCloudinary(file, cloudName, uploadPreset));
+    const uploadPromises = imageFiles.map(file => uploadImageToCloudinary(file, cloudName, apiKey, apiSecret));
     const urls = await Promise.all(uploadPromises);
     return urls;
   } catch (error) {

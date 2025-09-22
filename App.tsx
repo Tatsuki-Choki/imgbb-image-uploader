@@ -32,9 +32,10 @@ const App: React.FC = () => {
   const [serviceProvider, setServiceProvider] = useState<'imgbb' | 'cloudinary'>(() => 
     localStorage.getItem('serviceProvider') as 'imgbb' | 'cloudinary' || 'imgbb'
   );
-  const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('imgbbApiKey') || '');
+  const [imgbbApiKey, setImgbbApiKey] = useState<string>(() => localStorage.getItem('imgbbApiKey') || '');
   const [cloudName, setCloudName] = useState<string>(() => localStorage.getItem('cloudinaryCloudName') || '');
-  const [uploadPreset, setUploadPreset] = useState<string>(() => localStorage.getItem('cloudinaryUploadPreset') || '');
+  const [cloudinaryApiKey, setCloudinaryApiKey] = useState<string>(() => localStorage.getItem('cloudinaryApiKey') || '');
+  const [apiSecret, setApiSecret] = useState<string>(() => localStorage.getItem('cloudinaryApiSecret') || '');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [uploading, setUploading] = useState<boolean>(false);
@@ -47,10 +48,11 @@ const App: React.FC = () => {
   useEffect(() => {
     // Save settings to localStorage whenever they change
     localStorage.setItem('serviceProvider', serviceProvider);
-    localStorage.setItem('imgbbApiKey', apiKey);
+    localStorage.setItem('imgbbApiKey', imgbbApiKey);
     localStorage.setItem('cloudinaryCloudName', cloudName);
-    localStorage.setItem('cloudinaryUploadPreset', uploadPreset);
-  }, [serviceProvider, apiKey, cloudName, uploadPreset]);
+    localStorage.setItem('cloudinaryApiKey', cloudinaryApiKey);
+    localStorage.setItem('cloudinaryApiSecret', apiSecret);
+  }, [serviceProvider, imgbbApiKey, cloudName, cloudinaryApiKey, apiSecret]);
 
   useEffect(() => {
     // Cleanup the object URLs to avoid memory leaks
@@ -103,13 +105,13 @@ const App: React.FC = () => {
     if (selectedFiles.length === 0) return;
 
     // Validate credentials based on service provider
-    if (serviceProvider === 'imgbb' && !apiKey.trim()) {
+    if (serviceProvider === 'imgbb' && !imgbbApiKey.trim()) {
       setError('ImgBB APIキーを入力してください。');
       return;
     }
 
-    if (serviceProvider === 'cloudinary' && (!cloudName.trim() || !uploadPreset.trim())) {
-      setError('Cloudinary Cloud NameとUpload Presetを入力してください。');
+    if (serviceProvider === 'cloudinary' && (!cloudName.trim() || !cloudinaryApiKey.trim() || !apiSecret.trim())) {
+      setError('Cloudinary Cloud Name、API Key、API Secretを入力してください。');
       return;
     }
 
@@ -120,18 +122,18 @@ const App: React.FC = () => {
     try {
       if (serviceProvider === 'imgbb') {
         if (uploadMode === 'single') {
-          const url = await uploadImage(selectedFiles[0], apiKey);
+          const url = await uploadImage(selectedFiles[0], imgbbApiKey);
           setImageUrls([url]);
         } else {
-          const urls = await uploadMultipleImages(selectedFiles, apiKey);
+          const urls = await uploadMultipleImages(selectedFiles, imgbbApiKey);
           setImageUrls(urls);
         }
       } else {
         if (uploadMode === 'single') {
-          const url = await uploadImageToCloudinary(selectedFiles[0], cloudName, uploadPreset);
+          const url = await uploadImageToCloudinary(selectedFiles[0], cloudName, cloudinaryApiKey, apiSecret);
           setImageUrls([url]);
         } else {
-          const urls = await uploadMultipleImagesToCloudinary(selectedFiles, cloudName, uploadPreset);
+          const urls = await uploadMultipleImagesToCloudinary(selectedFiles, cloudName, cloudinaryApiKey, apiSecret);
           setImageUrls(urls);
         }
       }
@@ -144,7 +146,7 @@ const App: React.FC = () => {
     } finally {
       setUploading(false);
     }
-  }, [selectedFiles, apiKey, cloudName, uploadPreset, serviceProvider, uploadMode]);
+  }, [selectedFiles, imgbbApiKey, cloudName, cloudinaryApiKey, apiSecret, serviceProvider, uploadMode]);
 
   const handleCopy = useCallback((url: string) => {
     if (!url || !navigator.clipboard) return;
@@ -208,12 +210,12 @@ const App: React.FC = () => {
                 
                 {serviceProvider === 'imgbb' ? (
                     <div className="mb-6">
-                        <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700">ImgBB APIキー</label>
+                        <label htmlFor="imgbbApiKey" className="block text-sm font-medium text-gray-700">ImgBB APIキー</label>
                         <input
-                            id="apiKey"
+                            id="imgbbApiKey"
                             type="password"
-                            value={apiKey}
-                            onChange={(e) => setApiKey(e.target.value)}
+                            value={imgbbApiKey}
+                            onChange={(e) => setImgbbApiKey(e.target.value)}
                             placeholder="APIキーを入力してください"
                             className="mt-1 w-full px-3 py-2 text-slate-800 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
@@ -238,13 +240,24 @@ const App: React.FC = () => {
                             />
                         </div>
                         <div>
-                            <label htmlFor="uploadPreset" className="block text-sm font-medium text-gray-700">Upload Preset</label>
+                            <label htmlFor="cloudinaryApiKey" className="block text-sm font-medium text-gray-700">Cloudinary API Key</label>
                             <input
-                                id="uploadPreset"
+                                id="cloudinaryApiKey"
                                 type="text"
-                                value={uploadPreset}
-                                onChange={(e) => setUploadPreset(e.target.value)}
-                                placeholder="Upload Presetを入力してください"
+                                value={cloudinaryApiKey}
+                                onChange={(e) => setCloudinaryApiKey(e.target.value)}
+                                placeholder="API Keyを入力してください"
+                                className="mt-1 w-full px-3 py-2 text-slate-800 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="apiSecret" className="block text-sm font-medium text-gray-700">Cloudinary API Secret</label>
+                            <input
+                                id="apiSecret"
+                                type="password"
+                                value={apiSecret}
+                                onChange={(e) => setApiSecret(e.target.value)}
+                                placeholder="API Secretを入力してください"
                                 className="mt-1 w-full px-3 py-2 text-slate-800 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
