@@ -39,6 +39,8 @@ const App: React.FC = () => {
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState<boolean>(false);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [allCopied, setAllCopied] = useState<boolean>(false);
   const [uploadMode, setUploadMode] = useState<'single' | 'multiple'>('single');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -62,6 +64,8 @@ const App: React.FC = () => {
     setImageUrls([]);
     setError(null);
     setIsCopied(false);
+    setCopiedIndex(null);
+    setAllCopied(false);
     if (fileInputRef.current) {
         fileInputRef.current.value = "";
     }
@@ -128,12 +132,13 @@ const App: React.FC = () => {
     }
   }, [selectedFiles, cloudName, apiKey, apiSecret, uploadMode]);
 
-  const handleCopy = useCallback((url: string) => {
+  const handleCopy = useCallback((url: string, index: number) => {
     if (!url || !navigator.clipboard) return;
 
     navigator.clipboard.writeText(url).then(() => {
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2500);
+      setCopiedIndex(index);
+      setAllCopied(false);
+      setTimeout(() => setCopiedIndex(null), 2500);
     });
   }, []);
 
@@ -142,8 +147,9 @@ const App: React.FC = () => {
 
     const allUrls = imageUrls.join('\n');
     navigator.clipboard.writeText(allUrls).then(() => {
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2500);
+      setAllCopied(true);
+      setCopiedIndex(null);
+      setTimeout(() => setAllCopied(false), 2500);
     });
   }, [imageUrls]);
 
@@ -152,8 +158,8 @@ const App: React.FC = () => {
         <div className="w-full max-w-md mx-auto bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl shadow-xl shadow-blue-500/10">
             <div className="p-8">
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-sky-500">Cloudinary画像アップローダー</h1>
-                    <p className="text-gray-500 mt-2">画像をCloudinaryにアップロードして共有リンクを即座に取得</p>
+                    <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-sky-500 whitespace-nowrap">Cloudinary画像アップローダー</h1>
+                    <p className="text-gray-500 mt-2 whitespace-nowrap">画像をCloudinaryにアップロードして共有リンクを即座に取得</p>
                 </div>
 
 
@@ -268,17 +274,17 @@ const App: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700">
                                 {uploadMode === 'single' ? '画像URL:' : `画像URL (${imageUrls.length}枚):`}
                             </label>
-                            {uploadMode === 'multiple' && (
-                                <button
-                                    onClick={handleCopyAll}
-                                    className={`flex items-center gap-1 px-3 py-1 text-xs font-medium text-white transition-all duration-300 rounded ${
-                                        isCopied ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'
-                                    }`}
-                                >
-                                    {isCopied ? <CheckIcon className="w-3 h-3" /> : <CopyIcon className="w-3 h-3" />}
-                                    {isCopied ? '全てコピー完了' : '全てコピー'}
-                                </button>
-                            )}
+                                {uploadMode === 'multiple' && (
+                                    <button
+                                        onClick={handleCopyAll}
+                                        className={`flex items-center gap-1 px-3 py-1 text-xs font-medium text-white transition-all duration-300 rounded ${
+                                            allCopied ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'
+                                        }`}
+                                    >
+                                        {allCopied ? <CheckIcon className="w-3 h-3" /> : <CopyIcon className="w-3 h-3" />}
+                                        {allCopied ? '全てコピー完了' : '全てコピー'}
+                                    </button>
+                                )}
                         </div>
                         
                         <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -290,14 +296,14 @@ const App: React.FC = () => {
                                         readOnly
                                         className="flex-1 px-3 py-2 text-xs text-slate-700 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
-                                    <button
-                                        onClick={() => handleCopy(url)}
-                                        className={`flex items-center justify-center w-16 h-8 px-2 text-xs font-semibold text-white transition-all duration-300 rounded ${
-                                            isCopied ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'
-                                        }`}
-                                    >
-                                        {isCopied ? <CheckIcon className="w-3 h-3" /> : <CopyIcon className="w-3 h-3" />}
-                                    </button>
+                                        <button
+                                            onClick={() => handleCopy(url, index)}
+                                            className={`flex items-center justify-center w-16 h-8 px-2 text-xs font-semibold text-white transition-all duration-300 rounded ${
+                                                copiedIndex === index ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'
+                                            }`}
+                                        >
+                                            {copiedIndex === index ? <CheckIcon className="w-3 h-3" /> : <CopyIcon className="w-3 h-3" />}
+                                        </button>
                                 </div>
                             ))}
                         </div>
