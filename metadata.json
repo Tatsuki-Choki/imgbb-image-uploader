@@ -1,0 +1,5 @@
+{
+  "name": "ImgBB Image Uploader",
+  "description": "An application to upload images to ImgBB and get a shareable URL with a one-click copy feature.",
+  "requestFramePermissions": []
+}
