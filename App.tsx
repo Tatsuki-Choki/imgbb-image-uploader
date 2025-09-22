@@ -29,9 +29,9 @@ const Spinner: React.FC = () => (
 
 const App: React.FC = () => {
   // 環境変数からCloudinary認証情報を取得
-  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || '';
-  const apiKey = import.meta.env.VITE_CLOUDINARY_API_KEY || '';
-  const apiSecret = import.meta.env.VITE_CLOUDINARY_API_SECRET || '';
+  const cloudName = import.meta.env.VITE_cloudinary_cloud_name || '';
+  const apiKey = import.meta.env.VITE_cloudinary_api_key || '';
+  const apiSecret = import.meta.env.VITE_cloudinary_api_secret || '';
   
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
@@ -45,7 +45,7 @@ const App: React.FC = () => {
   // 環境変数の設定チェック
   useEffect(() => {
     if (!cloudName || !apiKey || !apiSecret) {
-      setError('環境変数が設定されていません。.envファイルでVITE_CLOUDINARY_CLOUD_NAME、VITE_CLOUDINARY_API_KEY、VITE_CLOUDINARY_API_SECRETを設定してください。');
+      setError('環境変数が設定されていません。.envファイルでVITE_cloudinary_cloud_name、VITE_cloudinary_api_key、VITE_cloudinary_api_secretを設定してください。');
     }
   }, [cloudName, apiKey, apiSecret]);
 
@@ -101,7 +101,7 @@ const App: React.FC = () => {
 
     // 環境変数の設定チェック
     if (!cloudName || !apiKey || !apiSecret) {
-      setError('環境変数が設定されていません。.envファイルでVITE_CLOUDINARY_CLOUD_NAME、VITE_CLOUDINARY_API_KEY、VITE_CLOUDINARY_API_SECRETを設定してください。');
+      setError('環境変数が設定されていません。.envファイルでVITE_cloudinary_cloud_name、VITE_cloudinary_api_key、VITE_cloudinary_api_secretを設定してください。');
       return;
     }
 
@@ -162,9 +162,9 @@ const App: React.FC = () => {
                         以下の環境変数を.envファイルに設定してください：
                     </p>
                     <div className="text-xs text-blue-600 space-y-1 font-mono">
-                        <div>• VITE_CLOUDINARY_CLOUD_NAME=your_cloud_name</div>
-                        <div>• VITE_CLOUDINARY_API_KEY=your_api_key</div>
-                        <div>• VITE_CLOUDINARY_API_SECRET=your_api_secret</div>
+                        <div>• VITE_cloudinary_cloud_name=your_cloud_name</div>
+                        <div>• VITE_cloudinary_api_key=your_api_key</div>
+                        <div>• VITE_cloudinary_api_secret=your_api_secret</div>
                     </div>
                     <p className="text-xs text-blue-600 mt-2">
                         環境変数名は小文字、数字、ダッシュ、アンダースコアのみ使用可能です。
