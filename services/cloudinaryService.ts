@@ -147,6 +147,12 @@ export const uploadVideoToCloudinary = async (
     }
 
     const successResult = result as CloudinarySuccessResponse;
+    // 動画ファイルの場合、URLにMP4形式を強制的に指定
+    if (videoFile.type.startsWith('video/')) {
+      const baseUrl = successResult.secure_url;
+      // .mov拡張子を.mp4に置換
+      return baseUrl.replace(/\.(mov|avi|webm|ogg)$/i, '.mp4');
+    }
     return successResult.secure_url;
   } catch (error) {
     if (error instanceof Error) {
