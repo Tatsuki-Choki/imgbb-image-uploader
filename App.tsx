@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { uploadImageToCloudinary, uploadMultipleImagesToCloudinary } from './services/cloudinaryService';
+import { uploadImageToCloudinary, uploadMultipleImagesToCloudinary, uploadVideoToCloudinary } from './services/cloudinaryService';
 
 // --- Icon Components (defined outside App to prevent re-creation on re-renders) ---
 
@@ -33,12 +33,12 @@ const App: React.FC = () => {
   const apiKey = import.meta.env.VITE_cloudinary_api_key || '';
   const apiSecret = import.meta.env.VITE_cloudinary_api_secret || '';
   
+  const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [uploading, setUploading] = useState<boolean>(false);
-  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [isCopied, setIsCopied] = useState<boolean>(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [allCopied, setAllCopied] = useState<boolean>(false);
   const [uploadMode, setUploadMode] = useState<'single' | 'multiple'>('single');
@@ -61,9 +61,8 @@ const App: React.FC = () => {
   const resetState = () => {
     setSelectedFiles([]);
     setPreviewUrls([]);
-    setImageUrls([]);
+    setUploadedUrls([]);
     setError(null);
-    setIsCopied(false);
     setCopiedIndex(null);
     setAllCopied(false);
     if (fileInputRef.current) {
@@ -71,39 +70,62 @@ const App: React.FC = () => {
     }
   };
 
+  const handleTabChange = (tab: 'image' | 'video') => {
+    if (activeTab === tab) return;
+    setActiveTab(tab);
+    setUploadMode('single');
+    resetState();
+  };
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
-    // 画像ファイルかチェック
-    const invalidFiles = files.filter(file => !file.type.startsWith('image/'));
-    if (invalidFiles.length > 0) {
-      setError('有効な画像ファイルを選択してください。');
+    if (activeTab === 'image') {
+      const invalidFiles = files.filter(file => !file.type.startsWith('image/'));
+      if (invalidFiles.length > 0) {
+        setError('有効な画像ファイルを選択してください。');
+        return;
+      }
+
+      if (uploadMode === 'multiple' && files.length > 10) {
+        setError('一度にアップロードできる画像は10枚までです。');
+        return;
+      }
+
+      resetState();
+      
+      if (uploadMode === 'single') {
+        const file = files[0];
+        setSelectedFiles([file]);
+        setPreviewUrls([URL.createObjectURL(file)]);
+      } else {
+        setSelectedFiles(files);
+        setPreviewUrls(files.map(file => URL.createObjectURL(file)));
+      }
       return;
     }
 
-    // 複数ファイルの上限チェック
-    if (uploadMode === 'multiple' && files.length > 10) {
-      setError('一度にアップロードできる画像は10枚までです。');
+    const videoFile = files[0];
+    if (!videoFile.type.startsWith('video/')) {
+      setError('有効な動画ファイルを選択してください。');
+      return;
+    }
+
+    const maxSizeBytes = 100 * 1024 * 1024;
+    if (videoFile.size > maxSizeBytes) {
+      setError('100MB以下の動画ファイルを選択してください。');
       return;
     }
 
     resetState();
-    
-    if (uploadMode === 'single') {
-      const file = files[0];
-      setSelectedFiles([file]);
-      setPreviewUrls([URL.createObjectURL(file)]);
-    } else {
-      setSelectedFiles(files);
-      setPreviewUrls(files.map(file => URL.createObjectURL(file)));
-    }
+    setSelectedFiles([videoFile]);
+    setPreviewUrls([URL.createObjectURL(videoFile)]);
   };
 
   const handleUpload = useCallback(async () => {
     if (selectedFiles.length === 0) return;
 
-    // 環境変数の設定チェック
     if (!cloudName || !apiKey || !apiSecret) {
       setError('環境変数が設定されていません。.envファイルでVITE_cloudinary_cloud_name、VITE_cloudinary_api_key、VITE_cloudinary_api_secretを設定してください。');
       return;
@@ -111,15 +133,20 @@ const App: React.FC = () => {
 
     setUploading(true);
     setError(null);
-    setImageUrls([]);
+    setUploadedUrls([]);
 
     try {
-      if (uploadMode === 'single') {
-        const url = await uploadImageToCloudinary(selectedFiles[0], cloudName, apiKey, apiSecret);
-        setImageUrls([url]);
+      if (activeTab === 'image') {
+        if (uploadMode === 'single') {
+          const url = await uploadImageToCloudinary(selectedFiles[0], cloudName, apiKey, apiSecret);
+          setUploadedUrls([url]);
+        } else {
+          const urls = await uploadMultipleImagesToCloudinary(selectedFiles, cloudName, apiKey, apiSecret);
+          setUploadedUrls(urls);
+        }
       } else {
-        const urls = await uploadMultipleImagesToCloudinary(selectedFiles, cloudName, apiKey, apiSecret);
-        setImageUrls(urls);
+        const url = await uploadVideoToCloudinary(selectedFiles[0], cloudName, apiKey, apiSecret);
+        setUploadedUrls([url]);
       }
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -130,7 +157,7 @@ const App: React.FC = () => {
     } finally {
       setUploading(false);
     }
-  }, [selectedFiles, cloudName, apiKey, apiSecret, uploadMode]);
+  }, [selectedFiles, cloudName, apiKey, apiSecret, uploadMode, activeTab]);
 
   const handleCopy = useCallback((url: string, index: number) => {
     if (!url || !navigator.clipboard) return;
@@ -143,57 +170,89 @@ const App: React.FC = () => {
   }, []);
 
   const handleCopyAll = useCallback(() => {
-    if (imageUrls.length === 0 || !navigator.clipboard) return;
+    if (uploadedUrls.length === 0 || !navigator.clipboard) return;
 
-    const allUrls = imageUrls.join('\n');
+    const allUrls = uploadedUrls.join('\n');
     navigator.clipboard.writeText(allUrls).then(() => {
       setAllCopied(true);
       setCopiedIndex(null);
       setTimeout(() => setAllCopied(false), 2500);
     });
-  }, [imageUrls]);
+  }, [uploadedUrls]);
 
   return (
     <div className="min-h-screen w-full bg-gray-100 flex flex-col items-center justify-center p-4 text-slate-800 font-sans">
         <div className="w-full max-w-md mx-auto bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl shadow-xl shadow-blue-500/10">
             <div className="p-8">
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-gray-800">画像→URL変換くん</h1>
-                    <p className="text-gray-500 mt-2">画像をアップロードして共有リンクを即座に取得</p>
+                    <h1 className="text-3xl font-bold text-gray-800">メディア→URL変換くん</h1>
+                    <p className="text-gray-500 mt-2">画像や100MB以下の動画をアップロードして共有リンクを取得</p>
                 </div>
 
-
                 <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-3">アップロードモード</label>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
                         <button
-                            onClick={() => {
-                                setUploadMode('single');
-                                resetState();
-                            }}
-                            className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                uploadMode === 'single'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            onClick={() => handleTabChange('image')}
+                            className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                                activeTab === 'image'
+                                    ? 'bg-white text-blue-600 shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-800'
                             }`}
                         >
-                            単一画像
+                            画像アップロード
                         </button>
                         <button
-                            onClick={() => {
-                                setUploadMode('multiple');
-                                resetState();
-                            }}
-                            className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                uploadMode === 'multiple'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            onClick={() => handleTabChange('video')}
+                            className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                                activeTab === 'video'
+                                    ? 'bg-white text-blue-600 shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-800'
                             }`}
                         >
-                            複数画像（最大10枚）
+                            動画アップロード
                         </button>
                     </div>
                 </div>
+
+                {activeTab === 'image' && (
+                    <div className="mb-6">
+                        <label className="block text-sm font-medium text-gray-700 mb-3">アップロードモード</label>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => {
+                                    setUploadMode('single');
+                                    resetState();
+                                }}
+                                className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                    uploadMode === 'single'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                            >
+                                単一画像
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setUploadMode('multiple');
+                                    resetState();
+                                }}
+                                className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                    uploadMode === 'multiple'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                            >
+                                複数画像（最大10枚）
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'video' && (
+                    <div className="mb-6 text-sm text-gray-600">
+                        100MB以下の動画ファイルを1つだけアップロードできます。
+                    </div>
+                )}
 
                 {previewUrls.length === 0 && (
                     <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors duration-300">
@@ -201,7 +260,11 @@ const App: React.FC = () => {
                             <UploadIcon />
                             <p className="mb-2 text-sm text-gray-500">
                                 <span className="font-semibold">
-                                    {uploadMode === 'single' ? 'クリックして画像を選択' : 'クリックして画像を選択（最大10枚）'}
+                                    {activeTab === 'image'
+                                        ? uploadMode === 'single'
+                                            ? 'クリックして画像を選択'
+                                            : 'クリックして画像を選択（最大10枚）'
+                                        : 'クリックして動画を選択（100MB以下）'}
                                 </span>
                             </p>
                             <p className="text-xs text-gray-400">またはドラッグ＆ドロップ</p>
@@ -211,8 +274,8 @@ const App: React.FC = () => {
                             id="dropzone-file" 
                             type="file" 
                             className="hidden" 
-                            accept="image/*" 
-                            multiple={uploadMode === 'multiple'}
+                            accept={activeTab === 'image' ? 'image/*' : 'video/*'} 
+                            multiple={activeTab === 'image' && uploadMode === 'multiple'}
                             onChange={handleFileChange} 
                         />
                     </label>
@@ -221,28 +284,38 @@ const App: React.FC = () => {
                 {previewUrls.length > 0 && (
                     <div className="mt-4 flex flex-col items-center gap-4">
                         <div className="w-full">
-                            {uploadMode === 'single' ? (
-                                <div className="w-full h-48 flex justify-center items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
-                                    <img src={previewUrls[0]} alt="プレビュー画像" className="object-contain max-h-full max-w-full" />
-                                </div>
+                            {activeTab === 'image' ? (
+                                uploadMode === 'single' ? (
+                                    <div className="w-full h-48 flex justify-center items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                                        <img src={previewUrls[0]} alt="プレビュー画像" className="object-contain max-h-full max-w-full" />
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                                        {previewUrls.map((url, index) => (
+                                            <div key={index} className="w-full h-24 flex justify-center items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                                                <img src={url} alt={`プレビュー画像 ${index + 1}`} className="object-contain max-h-full max-w-full" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )
                             ) : (
-                                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                                    {previewUrls.map((url, index) => (
-                                        <div key={index} className="w-full h-24 flex justify-center items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
-                                            <img src={url} alt={`プレビュー画像 ${index + 1}`} className="object-contain max-h-full max-w-full" />
-                                        </div>
-                                    ))}
+                                <div className="w-full h-48 flex justify-center items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                                    <video src={previewUrls[0]} controls className="w-full h-full object-contain" />
                                 </div>
                             )}
                         </div>
-                         {imageUrls.length === 0 && !uploading && (
+                        {uploadedUrls.length === 0 && !uploading && (
                             <div className="flex w-full gap-2">
                                 <button
                                     onClick={handleUpload}
-                                    disabled={uploading || !apiKey}
+                                    disabled={uploading || !cloudName || !apiKey || !apiSecret}
                                     className="flex-grow items-center justify-center h-12 px-6 font-semibold text-white transition-all duration-300 bg-blue-600 rounded-lg hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-white disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {uploadMode === 'single' ? '画像をアップロード' : `${selectedFiles.length}枚の画像をアップロード`}
+                                    {activeTab === 'image'
+                                        ? uploadMode === 'single'
+                                            ? '画像をアップロード'
+                                            : `${selectedFiles.length}枚の画像をアップロード`
+                                        : '動画をアップロード'}
                                 </button>
                                 <button 
                                     onClick={resetState}
@@ -251,7 +324,7 @@ const App: React.FC = () => {
                                     キャンセル
                                 </button>
                             </div>
-                         )}
+                        )}
                     </div>
                 )}
                 
@@ -268,27 +341,31 @@ const App: React.FC = () => {
                     </div>
                 )}
                 
-                {imageUrls.length > 0 && (
+                {uploadedUrls.length > 0 && (
                     <div className="mt-6 space-y-3 animate-fade-in">
                         <div className="flex items-center justify-between">
                             <label className="block text-sm font-medium text-gray-700">
-                                {uploadMode === 'single' ? '画像URL:' : `画像URL (${imageUrls.length}枚):`}
+                                {activeTab === 'image'
+                                    ? uploadMode === 'single'
+                                        ? '画像URL:'
+                                        : `画像URL (${uploadedUrls.length}枚):`
+                                    : '動画URL:'}
                             </label>
-                                {uploadMode === 'multiple' && (
-                                    <button
-                                        onClick={handleCopyAll}
-                                        className={`flex items-center gap-1 px-3 py-1 text-xs font-medium text-white transition-all duration-300 rounded ${
-                                            allCopied ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'
-                                        }`}
-                                    >
-                                        {allCopied ? <CheckIcon className="w-3 h-3" /> : <CopyIcon className="w-3 h-3" />}
-                                        {allCopied ? '全てコピー完了' : '全てコピー'}
-                                    </button>
-                                )}
+                            {activeTab === 'image' && uploadMode === 'multiple' && uploadedUrls.length > 1 && (
+                                <button
+                                    onClick={handleCopyAll}
+                                    className={`flex items-center gap-1 px-3 py-1 text-xs font-medium text-white transition-all duration-300 rounded ${
+                                        allCopied ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'
+                                    }`}
+                                >
+                                    {allCopied ? <CheckIcon className="w-3 h-3" /> : <CopyIcon className="w-3 h-3" />}
+                                    {allCopied ? '全てコピー完了' : '全てコピー'}
+                                </button>
+                            )}
                         </div>
                         
                         <div className="space-y-2 max-h-64 overflow-y-auto">
-                            {imageUrls.map((url, index) => (
+                            {uploadedUrls.map((url, index) => (
                                 <div key={index} className="flex gap-2">
                                     <input
                                         type="text"
@@ -296,14 +373,14 @@ const App: React.FC = () => {
                                         readOnly
                                         className="flex-1 px-3 py-2 text-xs text-slate-700 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
-                                        <button
-                                            onClick={() => handleCopy(url, index)}
-                                            className={`flex items-center justify-center w-16 h-8 px-2 text-xs font-semibold text-white transition-all duration-300 rounded ${
-                                                copiedIndex === index ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'
-                                            }`}
-                                        >
-                                            {copiedIndex === index ? <CheckIcon className="w-3 h-3" /> : <CopyIcon className="w-3 h-3" />}
-                                        </button>
+                                    <button
+                                        onClick={() => handleCopy(url, index)}
+                                        className={`flex items-center justify-center w-16 h-8 px-2 text-xs font-semibold text-white transition-all duration-300 rounded ${
+                                            copiedIndex === index ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'
+                                        }`}
+                                    >
+                                        {copiedIndex === index ? <CheckIcon className="w-3 h-3" /> : <CopyIcon className="w-3 h-3" />}
+                                    </button>
                                 </div>
                             ))}
                         </div>
@@ -312,7 +389,9 @@ const App: React.FC = () => {
                             onClick={resetState}
                             className="w-full mt-2 text-sm text-blue-600 hover:text-blue-500 transition-colors"
                         >
-                            {uploadMode === 'single' ? '別の画像をアップロード' : '別の画像をアップロード'}
+                            {activeTab === 'image'
+                                ? (uploadMode === 'single' ? '別の画像をアップロード' : '別の画像をアップロード')
+                                : '別の動画をアップロード'}
                         </button>
                     </div>
                 )}

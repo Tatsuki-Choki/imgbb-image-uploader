@@ -105,3 +105,53 @@ export const uploadMultipleImagesToCloudinary = async (
     throw new Error('画像の一括アップロード中に予期せぬエラーが発生しました。');
   }
 };
+
+export const uploadVideoToCloudinary = async (
+  videoFile: File,
+  cloudName: string,
+  apiKey: string,
+  apiSecret: string
+): Promise<string> => {
+  if (!cloudName || cloudName.trim() === '') {
+    throw new Error('Cloudinary Cloud Nameが設定されていません。');
+  }
+
+  if (!apiKey || apiKey.trim() === '') {
+    throw new Error('Cloudinary API Keyが設定されていません。');
+  }
+
+  if (!apiSecret || apiSecret.trim() === '') {
+    throw new Error('Cloudinary API Secretが設定されていません。');
+  }
+
+  const timestamp = Math.round(new Date().getTime() / 1000);
+  const signature = await generateSignature(timestamp, apiSecret);
+
+  const formData = new FormData();
+  formData.append('file', videoFile);
+  formData.append('api_key', apiKey);
+  formData.append('timestamp', timestamp.toString());
+  formData.append('signature', signature);
+
+  try {
+    const response = await fetch(`${CLOUDINARY_UPLOAD_URL}/${cloudName}/video/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || result.error) {
+      const errorResult = result as CloudinaryErrorResponse;
+      throw new Error(errorResult.error?.message || '不明なエラーにより動画のアップロードに失敗しました。');
+    }
+
+    const successResult = result as CloudinarySuccessResponse;
+    return successResult.secure_url;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`アップロード失敗: ${error.message}`);
+    }
+    throw new Error('動画のアップロード中に予期せぬエラーが発生しました。');
+  }
+};
